@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ThreatScan</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+    :root {
+      --bg:          #0a0d12;
+      --surface:     #111520;
+      --border:      #1e2535;
+      --accent:      #00e5ff;
+      --accent-dim:  rgba(0,229,255,0.12);
+      --red:         #ff3b5c;
+      --red-dim:     rgba(255,59,92,0.12);
+      --yellow:      #ffc947;
+      --yellow-dim:  rgba(255,201,71,0.12);
+      --green:       #00e676;
+      --green-dim:   rgba(0,230,118,0.12);
+      --text:        #e2e8f0;
+      --muted:       #64748b;
+      --mono:        'Share Tech Mono', monospace;
+      --sans:        'DM Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: relative;
+      overflow: hidden;
+    }
+    .header::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), #7c3aed, var(--accent));
+      background-size: 200% 100%;
+      animation: shimmer 3s linear infinite;
+    }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    .logo {
+      width: 28px; height: 28px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .logo svg { width: 16px; height: 16px; }
+
+    .header-text h1 {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+    }
+    .header-text p {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    .scan-status {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-align: right;
+    }
+    .scan-status .dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .scan-status.active .dot {
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── Main content ── */
+    .content { padding: 14px 16px; }
+
+    /* ── Score ring ── */
+    .score-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 14px;
+    }
+
+    .score-ring-wrap { position: relative; flex-shrink: 0; }
+    .score-ring-wrap svg { width: 80px; height: 80px; transform: rotate(-90deg); }
+    .score-track { fill: none; stroke: var(--border); stroke-width: 6; }
+    .score-fill {
+      fill: none;
+      stroke-width: 6;
+      stroke-linecap: round;
+      stroke-dasharray: 220;
+      stroke-dashoffset: 220;
+      transition: stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1), stroke 0.4s;
+    }
+    .score-label {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+    .score-number {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1;
+      display: block;
+    }
+    .score-unit {
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    .score-meta { flex: 1; min-width: 0; }
+    .risk-label {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 4px;
+    }
+    .risk-sublabel {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .scan-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .scan-btn:hover { background: rgba(0,229,255,0.2); }
+    .scan-btn:active { transform: scale(0.97); }
+    .scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Loading bar ── */
+    .loading-bar {
+      height: 2px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      display: none;
+    }
+    .loading-bar.active { display: block; }
+    .loading-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), #7c3aed);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    /* ── Findings ── */
+    .findings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .findings-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+    }
+    .findings-count {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .findings-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .finding {
+      display: flex;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      animation: fadeIn 0.3s ease both;
+    }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+
+    .finding.critical { background: var(--red-dim); border-color: rgba(255,59,92,0.3); }
+    .finding.warning  { background: var(--yellow-dim); border-color: rgba(255,201,71,0.3); }
+    .finding.info     { background: var(--accent-dim); border-color: rgba(0,229,255,0.2); }
+
+    .finding-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .finding-body { flex: 1; min-width: 0; }
+    .finding-title {
+      font-weight: 500;
+      font-size: 12px;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .finding-title .badge {
+      font-family: var(--mono);
+      font-size: 8px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .finding.critical .badge { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,59,92,0.4); }
+    .finding.warning  .badge { background: var(--yellow-dim); color: var(--yellow); border: 1px solid rgba(255,201,71,0.4); }
+    .finding.info     .badge { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,229,255,0.3); }
+
+    .finding-detail {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .finding-detail code {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text);
+      background: rgba(255,255,255,0.05);
+      padding: 0 4px;
+      border-radius: 3px;
+    }
+
+    /* ── Empty / ready state ── */
+    .empty-state {
+      text-align: center;
+      padding: 30px 16px;
+      color: var(--muted);
+    }
+    .empty-state .icon { font-size: 28px; margin-bottom: 8px; opacity: 0.5; }
+    .empty-state p { font-size: 12px; line-height: 1.6; }
+
+    /* ── Clean state ── */
+    .clean-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 20px;
+      background: var(--green-dim);
+      border: 1px solid rgba(0,230,118,0.3);
+      border-radius: 10px;
+      text-align: center;
+    }
+    .clean-state .icon { font-size: 24px; }
+    .clean-state p { font-size: 12px; color: var(--green); font-weight: 500; }
+    .clean-state span { font-size: 11px; color: var(--muted); }
+
+    /* ── Sender info strip ── */
+    .sender-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 10px;
+      font-size: 11px;
+      display: none;
+    }
+    .sender-strip.visible { display: flex; }
+    .sender-strip .label { color: var(--muted); flex-shrink: 0; }
+    .sender-strip .value {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .external-badge {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 9px;
+      padding: 2px 6px;
+      background: var(--yellow-dim);
+      color: var(--yellow);
+      border: 1px solid rgba(255,201,71,0.4);
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      font-size: 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+      letter-spacing: 0.04em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <path d="M9 12l2 2 4-4"/>
+    </svg>
+  </div>
+  <div class="header-text">
+    <h1>THREATSCAN</h1>
+    <p>District Email Security</p>
+  </div>
+  <div class="scan-status" id="statusBadge">
+    <span class="dot"></span>READY
+  </div>
+</div>
+
+<!-- ── Main ── -->
+<div class="content">
+
+  <!-- Score card -->
+  <div class="score-section">
+    <div class="score-ring-wrap">
+      <svg viewBox="0 0 80 80">
+        <circle class="score-track" cx="40" cy="40" r="35"/>
+        <circle class="score-fill" id="scoreRing" cx="40" cy="40" r="35" stroke="#1e2535"/>
+      </svg>
+      <div class="score-label">
+        <span class="score-number" id="scoreNumber">--</span>
+        <span class="score-unit">RISK</span>
+      </div>
+    </div>
+    <div class="score-meta">
+      <div class="risk-label" id="riskLabel" style="color: var(--muted)">Not Scanned</div>
+      <div class="risk-sublabel" id="riskSub">Open an email and click scan</div>
+      <button class="scan-btn" id="scanBtn" onclick="startScan()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        SCAN EMAIL
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading bar -->
+  <div class="loading-bar" id="loadingBar">
+    <div class="loading-fill" id="loadingFill"></div>
+  </div>
+
+  <!-- Sender strip -->
+  <div class="sender-strip" id="senderStrip">
+    <span class="label">FROM</span>
+    <span class="value" id="senderValue"></span>
+    <span class="external-badge" id="externalBadge" style="display:none">EXTERNAL</span>
+  </div>
+
+  <!-- Findings -->
+  <div class="findings-header" id="findingsHeader" style="display:none">
+    <span class="findings-title">// THREAT FINDINGS</span>
+    <span class="findings-count" id="findingsCount"></span>
+  </div>
+  <div class="findings-list" id="findingsList"></div>
+
+  <!-- Empty state -->
+  <div class="empty-state" id="emptyState">
+    <div class="icon">🔍</div>
+    <p>Click <strong>SCAN EMAIL</strong> to analyze<br>the currently selected message for threats.</p>
+  </div>
+
+</div>
+
+<!-- ── Footer ── -->
+<div class="footer">
+  <span>v1.0.0 · District IT Security</span>
+  <span id="lastScan"></span>
+</div>
+
+<script>
+// ── Office initialization ──
+Office.onReady(function(info) {
+  if (info.host === Office.HostType.Outlook) {
+    console.log("ThreatScan ready.");
+  }
+});
+
+// ── Threat detection engine ──
+const PHISHING_KEYWORDS = [
+  'verify your account', 'confirm your identity', 'unusual activity',
+  'suspended account', 'click here immediately', 'act now', 'limited time',
+  'update your information', 'your account will be closed', 'validate your',
+  'security alert', 'unauthorized access', 'reset your password immediately'
+];
+
+const SOCIAL_ENGINEERING_KEYWORDS = [
+  'wire transfer', 'gift card', 'urgent request', 'confidential',
+  'do not share', 'keep this between us', 'don\'t tell anyone',
+  'ceo', 'executive request', 'board directive', 'as soon as possible',
+  'wiring instructions', 'bank details', 'sensitive matter',
+  'personal favor', 'strictly confidential'
+];
+
+const ATTACHMENT_DANGER_EXTENSIONS = [
+  '.exe', '.bat', '.cmd', '.vbs', '.js', '.jar', '.scr',
+  '.ps1', '.msi', '.hta', '.pif', '.com', '.lnk'
+];
+
+const SUSPICIOUS_LINK_PATTERNS = [
+  /http:\/\//i,                      // non-HTTPS
+  /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/,  // raw IP address
+  /bit\.ly|tinyurl|t\.co|ow\.ly|goo\.gl|rb\.gy|shorte\.st/i,  // URL shorteners
+  /[a-z0-9\-]+\.tk|\.ml|\.ga|\.cf|\.gq/i,  // common free/phishing TLDs
+  /paypa1|micros0ft|apple-id|google-login|secure-login/i  // typosquat
+];
+
+// ── District domain (update to match your org) ──
+const DISTRICT_DOMAIN = 'yourdomain.org';  // ← UPDATE THIS
+
+// ── Main scan function ──
+async function startScan() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  setStatus('SCANNING', true);
+  showLoadingBar();
+
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('findingsList').innerHTML = '';
+  document.getElementById('findingsHeader').style.display = 'none';
+  document.getElementById('senderStrip').classList.remove('visible');
+  resetScore();
+
+  try {
+    const item = Office.context.mailbox.item;
+    let progress = 0;
+
+    // ── Step 1: Gather metadata ──
+    setProgress(15);
+    const subject  = item.subject || '';
+    const sender   = item.from ? item.from.emailAddress : '';
+    const senderName = item.from ? item.from.displayName : '';
+    const to       = item.to || [];
+    const attachments = item.attachments || [];
+
+    // ── Step 2: Get body ──
+    setProgress(35);
+    const body = await getBody(item);
+
+    // ── Step 3: Run checks ──
+    setProgress(60);
+    const findings = [];
+
+    // External sender check
+    const isExternal = !sender.toLowerCase().endsWith('@' + DISTRICT_DOMAIN.toLowerCase());
+    showSender(sender, isExternal);
+
+    if (isExternal) {
+      findings.push({
+        severity: 'warning',
+        icon: '🌐',
+        title: 'External Sender',
+        badge: 'WARN',
+        detail: `This email originates from outside the district: <code>${sender}</code>. Verify before clicking links or opening attachments.`
+      });
+    }
+
+    // Sender display name spoofing
+    if (senderName && !isExternal === false) {
+      const domainPart = sender.split('@')[1] || '';
+      const KNOWN_SPOOF_NAMES = ['helpdesk', 'it support', 'microsoft', 'admin', 'noreply', 'security'];
+      const lowerName = senderName.toLowerCase();
+      if (KNOWN_SPOOF_NAMES.some(n => lowerName.includes(n)) && isExternal) {
+        findings.push({
+          severity: 'critical',
+          icon: '🎭',
+          title: 'Possible Sender Spoofing',
+          badge: 'CRITICAL',
+          detail: `Display name "<code>${senderName}</code>" impersonates a trusted entity but email originates from <code>${domainPart}</code>.`
+        });
+      }
+    }
+
+    // Phishing keyword scan
+    setProgress(70);
+    const lowerBody = body.toLowerCase();
+    const lowerSubject = subject.toLowerCase();
+    const phishHits = PHISHING_KEYWORDS.filter(kw =>
+      lowerBody.includes(kw) || lowerSubject.includes(kw)
+    );
+    if (phishHits.length > 0) {
+      findings.push({
+        severity: 'critical',
+        icon: '🎣',
+        title: 'Phishing Indicators Detected',
+        badge: 'CRITICAL',
+        detail: `Found ${phishHits.length} phishing phrase(s): ${phishHits.slice(0, 3).map(k => `<code>${k}</code>`).join(', ')}${phishHits.length > 3 ? ` +${phishHits.length - 3} more` : ''}.`
+      });
+    }
+
+    // Social engineering keyword scan
+    const seHits = SOCIAL_ENGINEERING_KEYWORDS.filter(kw =>
+      lowerBody.includes(kw) || lowerSubject.includes(kw)
+    );
+    if (seHits.length > 0) {
+      findings.push({
+        severity: 'warning',
+        icon: '🧠',
+        title: 'Social Engineering Language',
+        badge: 'WARN',
+        detail: `Detected manipulation tactics: ${seHits.slice(0, 3).map(k => `<code>${k}</code>`).join(', ')}${seHits.length > 3 ? ` +${seHits.length - 3} more` : ''}. Be cautious of urgent requests.`
+      });
+    }
+
+    // Suspicious link scan
+    setProgress(80);
+    const urlRegex = /https?:\/\/[^\s"'<>]+/gi;
+    const links = body.match(urlRegex) || [];
+    const suspLinks = [];
+    links.forEach(link => {
+      SUSPICIOUS_LINK_PATTERNS.forEach(pattern => {
+        if (pattern.test(link) && !suspLinks.includes(link)) {
+          suspLinks.push(link);
+        }
+      });
+    });
+    if (suspLinks.length > 0) {
+      const shortLinks = suspLinks.map(l => l.length > 50 ? l.substring(0, 50) + '…' : l);
+      findings.push({
+        severity: 'critical',
+        icon: '🔗',
+        title: 'Suspicious Links Found',
+        badge: 'CRITICAL',
+        detail: `${suspLinks.length} suspicious URL(s) detected: ${shortLinks.slice(0, 2).map(l => `<code>${l}</code>`).join(', ')}${suspLinks.length > 2 ? ` +${suspLinks.length - 2} more` : ''}.`
+      });
+    }
+
+    // Attachment scan
+    setProgress(90);
+    if (attachments.length > 0) {
+      const dangerousAtts = attachments.filter(att => {
+        const name = (att.name || '').toLowerCase();
+        return ATTACHMENT_DANGER_EXTENSIONS.some(ext => name.endsWith(ext));
+      });
+      if (dangerousAtts.length > 0) {
+        findings.push({
+          severity: 'critical',
+          icon: '📎',
+          title: 'Dangerous Attachment Type',
+          badge: 'CRITICAL',
+          detail: `Attachment(s) with executable extensions: ${dangerousAtts.map(a => `<code>${a.name}</code>`).join(', ')}. Do NOT open.`
+        });
+      } else {
+        findings.push({
+          severity: 'info',
+          icon: '📎',
+          title: `${attachments.length} Attachment(s) Present`,
+          badge: 'INFO',
+          detail: `Attachment extensions appear safe: ${attachments.map(a => `<code>${a.name}</code>`).join(', ')}. Still verify the sender before opening.`
+        });
+      }
+    }
+
+    // Non-HTTPS links info
+    const httpLinks = links.filter(l => l.startsWith('http://'));
+    if (httpLinks.length > 0 && !suspLinks.some(l => l.startsWith('http://'))) {
+      findings.push({
+        severity: 'info',
+        icon: '🔓',
+        title: 'Unencrypted Links (HTTP)',
+        badge: 'INFO',
+        detail: `${httpLinks.length} link(s) use HTTP instead of HTTPS. These are not encrypted and may indicate an older or poorly maintained site.`
+      });
+    }
+
+    setProgress(100);
+
+    // ── Step 4: Calculate score & render ──
+    setTimeout(() => {
+      hideLoadingBar();
+      const score = calculateRiskScore(findings);
+      renderScore(score);
+      renderFindings(findings);
+      setStatus('COMPLETE', false);
+      btn.disabled = false;
+      document.getElementById('lastScan').textContent =
+        'Last scan: ' + new Date().toLocaleTimeString();
+    }, 400);
+
+  } catch (err) {
+    console.error('ThreatScan error:', err);
+    hideLoadingBar();
+    setStatus('ERROR', false);
+    btn.disabled = false;
+    document.getElementById('findingsList').innerHTML = `
+      <div class="finding warning">
+        <div class="finding-icon">⚠️</div>
+        <div class="finding-body">
+          <div class="finding-title">Scan Error<span class="badge">WARN</span></div>
+          <div class="finding-detail">Could not fully scan this email. Try again or contact IT. Error: ${err.message}</div>
+        </div>
+      </div>`;
+    document.getElementById('findingsHeader').style.display = 'flex';
+  }
+}
+
+// ── Get email body ──
+function getBody(item) {
+  return new Promise((resolve, reject) => {
+    item.body.getAsync(Office.CoercionType.Text, function(result) {
+      if (result.status === Office.AsyncResultStatus.Succeeded) {
+        resolve(result.value);
+      } else {
+        reject(new Error(result.error.message));
+      }
+    });
+  });
+}
+
+// ── Calculate risk score (0-100) ──
+function calculateRiskScore(findings) {
+  let score = 0;
+  findings.forEach(f => {
+    if (f.severity === 'critical') score += 30;
+    else if (f.severity === 'warning') score += 15;
+    else score += 5;
+  });
+  return Math.min(score, 100);
+}
+
+// ── Render risk score ring ──
+function renderScore(score) {
+  const ring = document.getElementById('scoreRing');
+  const num  = document.getElementById('scoreNumber');
+  const label = document.getElementById('riskLabel');
+  const sub   = document.getElementById('riskSub');
+  const circumference = 2 * Math.PI * 35; // ~220
+
+  let color, text, subtext;
+  if (score === 0) {
+    color = 'var(--green)'; text = 'CLEAN'; subtext = 'No threats detected';
+  } else if (score <= 25) {
+    color = 'var(--green)'; text = 'LOW RISK'; subtext = 'Minor indicators found';
+  } else if (score <= 55) {
+    color = 'var(--yellow)'; text = 'MODERATE'; subtext = 'Review before acting';
+  } else if (score <= 80) {
+    color = 'var(--red)'; text = 'HIGH RISK'; subtext = 'Likely malicious — do not click links';
+  } else {
+    color = 'var(--red)'; text = 'CRITICAL'; subtext = '⚠️ Report to IT immediately';
+  }
+
+  ring.style.stroke = color;
+  ring.style.strokeDashoffset = circumference - (score / 100) * circumference;
+  num.textContent = score;
+  num.style.color = color;
+  label.textContent = text;
+  label.style.color = color;
+  sub.textContent = subtext;
+}
+
+function resetScore() {
+  const ring = document.getElementById('scoreRing');
+  ring.style.stroke = 'var(--border)';
+  ring.style.strokeDashoffset = 220;
+  document.getElementById('scoreNumber').textContent = '--';
+  document.getElementById('scoreNumber').style.color = 'var(--muted)';
+  document.getElementById('riskLabel').textContent = 'Scanning…';
+  document.getElementById('riskLabel').style.color = 'var(--muted)';
+  document.getElementById('riskSub').textContent = '';
+}
+
+// ── Render findings list ──
+function renderFindings(findings) {
+  const list = document.getElementById('findingsList');
+  const header = document.getElementById('findingsHeader');
+  const count  = document.getElementById('findingsCount');
+  list.innerHTML = '';
+
+  if (findings.length === 0) {
+    list.innerHTML = `
+      <div class="clean-state">
+        <div class="icon">✅</div>
+        <p>No threats detected</p>
+        <span>This email appears safe based on automated analysis.<br>Always use good judgment before clicking links.</span>
+      </div>`;
+    header.style.display = 'none';
+    return;
+  }
+
+  header.style.display = 'flex';
+  count.textContent = `${findings.length} finding${findings.length !== 1 ? 's' : ''}`;
+
+  findings.forEach((f, i) => {
+    const div = document.createElement('div');
+    div.className = `finding ${f.severity}`;
+    div.style.animationDelay = `${i * 80}ms`;
+    div.innerHTML = `
+      <div class="finding-icon">${f.icon}</div>
+      <div class="finding-body">
+        <div class="finding-title">${f.title}<span class="badge">${f.badge}</span></div>
+        <div class="finding-detail">${f.detail}</div>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+// ── Show sender strip ──
+function showSender(email, isExternal) {
+  const strip = document.getElementById('senderStrip');
+  document.getElementById('senderValue').textContent = email;
+  const badge = document.getElementById('externalBadge');
+  badge.style.display = isExternal ? 'inline-block' : 'none';
+  strip.classList.add('visible');
+}
+
+// ── Loading bar ──
+function showLoadingBar() {
+  document.getElementById('loadingBar').classList.add('active');
+  setProgress(0);
+}
+function hideLoadingBar() {
+  document.getElementById('loadingBar').classList.remove('active');
+}
+function setProgress(pct) {
+  document.getElementById('loadingFill').style.width = pct + '%';
+}
+
+// ── Status badge ──
+function setStatus(text, active) {
+  const badge = document.getElementById('statusBadge');
+  badge.textContent = '';
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  badge.appendChild(dot);
+  badge.appendChild(document.createTextNode(text));
+  badge.className = 'scan-status' + (active ? ' active' : '');
+}
+</script>
+</body>
+</html>
