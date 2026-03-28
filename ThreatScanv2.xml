@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xsi:type="MailApp">
+
+  <Id>c3d4e5f6-a7b8-9012-cdef-123456789012</Id>
+  <Version>1.0.0.3</Version>
+  <ProviderName>Gritty</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="ThreatScan"/>
+  <Description DefaultValue="Email threat scanner."/>
+  <IconUrl DefaultValue="https://dragonsblue.github.io/threatscan/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://dragonsblue.github.io/threatscan/icon-80.png"/>
+  <SupportUrl DefaultValue="https://dragonsblue.github.io/threatscan"/>
+
+  <AppDomains>
+    <AppDomain>https://dragonsblue.github.io</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://dragonsblue.github.io/threatscan/taskpane.html"/>
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <Permissions>ReadItem</Permissions>
+
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+  </Rule>
+
+</OfficeApp>
