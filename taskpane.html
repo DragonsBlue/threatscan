@@ -525,7 +525,8 @@ async function startScan() {
 
     if (isExternal) {
       findings.push({
-        severity: 'warning',
+        type: 'external-sender',
+        severity: 'info',
         icon: '🌐',
         title: 'External Sender',
         badge: 'WARN',
@@ -562,6 +563,8 @@ async function startScan() {
     );
     if (phishHits.length > 0) {
       findings.push({
+        type: 'phishing-keywords',
+        hitCount: phishHits.length,
         severity: 'critical',
         icon: '🎣',
         title: 'Phishing Indicators Detected',
@@ -576,11 +579,13 @@ async function startScan() {
     );
     if (seHits.length > 0) {
       findings.push({
-        severity: 'warning',
+        type: 'social-engineering',
+        hitCount: seHits.length,
+        severity: seHits.length >= 3 ? 'critical' : 'warning',
         icon: '🧠',
         title: 'Social Engineering Language',
-        badge: 'WARN',
-        detail: `Detected manipulation tactics: ${seHits.slice(0, 3).map(k => `<code>${k}</code>`).join(', ')}${seHits.length > 3 ? ` +${seHits.length - 3} more` : ''}. Be cautious of urgent requests.`
+        badge: seHits.length >= 3 ? 'CRITICAL' : 'WARN',
+        detail: `Detected ${seHits.length} manipulation tactic(s): ${seHits.slice(0, 3).map(k => `<code>${k}</code>`).join(', ')}${seHits.length > 3 ? ` +${seHits.length - 3} more` : ''}. Be cautious of urgent requests.`
       });
     }
 
@@ -599,6 +604,7 @@ async function startScan() {
     if (suspLinks.length > 0) {
       const shortLinks = suspLinks.map(l => l.length > 50 ? l.substring(0, 50) + '…' : l);
       findings.push({
+        type: 'suspicious-links',
         severity: 'critical',
         icon: '🔗',
         title: 'Suspicious Links Found',
@@ -618,6 +624,7 @@ async function startScan() {
         findings.push({
           severity: 'critical',
           icon: '📎',
+          type: 'malicious-attachment',
           title: 'Dangerous Attachment Type',
           badge: 'CRITICAL',
           detail: `Attachment(s) with executable extensions: ${dangerousAtts.map(a => `<code>${a.name}</code>`).join(', ')}. Do NOT open.`
@@ -626,6 +633,7 @@ async function startScan() {
         findings.push({
           severity: 'info',
           icon: '📎',
+          type: 'attachments-present',
           title: `${attachments.length} Attachment(s) Present`,
           badge: 'INFO',
           detail: `Attachment extensions appear safe: ${attachments.map(a => `<code>${a.name}</code>`).join(', ')}. Still verify the sender before opening.`
@@ -637,6 +645,7 @@ async function startScan() {
     const httpLinks = links.filter(l => l.startsWith('http://'));
     if (httpLinks.length > 0 && !suspLinks.some(l => l.startsWith('http://'))) {
       findings.push({
+        type: 'http-links',
         severity: 'info',
         icon: '🔓',
         title: 'Unencrypted Links (HTTP)',
@@ -743,14 +752,50 @@ async function checkOriginCountry(findings, headers) {
   }
 }
 
-// ── Calculate risk score (0-100) ──
+// ── Calculate risk score (0-100) — weighted by finding type and hit count ──
 function calculateRiskScore(findings) {
   let score = 0;
+
+  // Weighted scores per finding type
+  const weights = {
+    'malicious-attachment':  45,
+    'sender-spoofing':       40,
+    'suspicious-links':      35,
+    'phishing-keywords':     null, // scaled by hit count below
+    'non-us-origin':         20,
+    'external-sender':        5,  // reduced — most legit email is external
+    'social-engineering':    null, // scaled by hit count below
+    'http-links':             5,
+    'attachments-present':    3,
+  };
+
+  // Combination multiplier — if 3+ categories fire, score gets a 1.2x boost
+  const criticalCount = findings.filter(f => f.severity === 'critical').length;
+  const warningCount  = findings.filter(f => f.severity === 'warning').length;
+
   findings.forEach(f => {
-    if (f.severity === 'critical') score += 30;
-    else if (f.severity === 'warning') score += 15;
-    else score += 5;
+    const w = weights[f.type];
+    if (w !== null && w !== undefined) {
+      score += w;
+    } else if (f.type === 'phishing-keywords') {
+      // Scale by hit count: 1-2=15, 3-5=25, 6+=35
+      const hits = f.hitCount || 1;
+      score += hits <= 2 ? 15 : hits <= 5 ? 25 : 35;
+    } else if (f.type === 'social-engineering') {
+      const hits = f.hitCount || 1;
+      score += hits <= 2 ? 10 : hits <= 5 ? 18 : 25;
+    } else {
+      // Fallback for any untyped findings
+      if (f.severity === 'critical') score += 30;
+      else if (f.severity === 'warning') score += 15;
+      else score += 5;
+    }
   });
+
+  // Combination multiplier: multiple categories = higher confidence
+  const categories = new Set(findings.map(f => f.type)).size;
+  if (categories >= 3) score = Math.round(score * 1.2);
+
   return Math.min(score, 100);
 }
 
