@@ -361,7 +361,7 @@
   </div>
   <div class="header-text">
     <h1>THREATSCAN</h1>
-    <p>7Networks Security</p>
+    <p>Email Security</p>
   </div>
   <div class="scan-status" id="statusBadge">
     <span class="dot"></span>READY
@@ -429,7 +429,7 @@
 
 <!-- ── Footer ── -->
 <div class="footer">
-  <span>v1.0.0 · 7Networks Security</span>
+  <span>v1.0.0</span>
   <span id="lastScan"></span>
 </div>
 
@@ -483,8 +483,7 @@ const SUSPICIOUS_LINK_PATTERNS = [
   /paypa1|micros0ft|apple-id|google-login|secure-login/i  // typosquat
 ];
 
-// ── District domain (update to match your org) ──
-const DISTRICT_DOMAIN = '';  // Domain check disabled
+const SENDER_DOMAIN = '';
 
 // ── Main scan function ──
 async function startScan() {
