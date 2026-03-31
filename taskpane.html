@@ -484,7 +484,7 @@ const SUSPICIOUS_LINK_PATTERNS = [
 ];
 
 // ── District domain (update to match your org) ──
-const DISTRICT_DOMAIN = '7networks270.us';
+const DISTRICT_DOMAIN = '';  // Domain check disabled
 
 // ── Main scan function ──
 async function startScan() {
@@ -519,20 +519,9 @@ async function startScan() {
     setProgress(60);
     const findings = [];
 
-    // External sender check
-    const isExternal = !sender.toLowerCase().endsWith('@' + DISTRICT_DOMAIN.toLowerCase());
-    showSender(sender, isExternal);
-
-    if (isExternal) {
-      findings.push({
-        type: 'external-sender',
-        severity: 'info',
-        icon: '🌐',
-        title: 'External Sender',
-        badge: 'WARN',
-        detail: `This email originates from outside the district: <code>${sender}</code>. Verify before clicking links or opening attachments.`
-      });
-    }
+    // External sender check disabled — domain not configured
+    const isExternal = false;
+    showSender(sender, false);
 
     // ── Non-US origin check via IP geolocation ──
     setProgress(65);
