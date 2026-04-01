@@ -429,7 +429,7 @@
 
 <!-- ── Footer ── -->
 <div class="footer">
-  <span>v1.0.1</span>
+  <span>v1.0.2</span>
   <span id="lastScan"></span>
 </div>
 
@@ -458,7 +458,15 @@ const PHISHING_KEYWORDS = [
   'your mailbox is full', 'your email will be deactivated',
   'you have a pending delivery', 'claim your prize',
   // Prize & reward scams
-  'congratulations you won', 'you have been selected', 'free gift card'
+  'congratulations you won', 'you have been selected', 'free gift card',
+  // Password change phishing
+  'change your password immediately', 'change their password',
+  'required to change', 'password change required', 'password must be changed',
+  'update your password', 'your password needs to be updated',
+  'security policy', 'security requirement', 'enacted a security policy',
+  'complete the password change', 'within 24 hours', 'within 48 hours',
+  'click here to log in', 'click here to verify', 'log into microsoft',
+  'all users are required', 'it administrator has', 'your it administrator'
 ];
 
 const SOCIAL_ENGINEERING_KEYWORDS = [
@@ -476,11 +484,27 @@ const ATTACHMENT_DANGER_EXTENSIONS = [
 ];
 
 const SUSPICIOUS_LINK_PATTERNS = [
-  /http:\/\//i,                      // non-HTTPS
-  /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/,  // raw IP address
-  /bit\.ly|tinyurl|t\.co|ow\.ly|goo\.gl|rb\.gy|shorte\.st/i,  // URL shorteners
-  /[a-z0-9\-]+\.tk|\.ml|\.ga|\.cf|\.gq/i,  // common free/phishing TLDs
-  /paypa1|micros0ft|apple-id|google-login|secure-login/i  // typosquat
+  /http:\/\//i,
+  /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/,
+  /bit\.ly|tinyurl|t\.co|ow\.ly|goo\.gl|rb\.gy|shorte\.st|is\.gd|buff\.ly/i,
+  /[a-z0-9\-]+\.tk|\.ml|\.ga|\.cf|\.gq|\.xyz|\.top|\.click|\.work/i,
+  /paypa1|micros0ft|apple-id|google-login|secure-login|arnazon|linkedln/i,
+  /login\.|signin\.|verify\.|account\.|secure\.|update\./i
+];
+
+// Trusted domains that should never be flagged as impersonation
+const TRUSTED_DOMAINS = [
+  'microsoft.com', 'microsoftonline.com', 'office.com', 'outlook.com',
+  'google.com', 'apple.com', 'amazon.com', 'paypal.com',
+  'linkedin.com', 'dropbox.com', 'docusign.com'
+];
+
+// Brand names that phishers commonly impersonate
+const IMPERSONATION_BRANDS = [
+  'microsoft', 'office 365', 'microsoft 365', 'outlook', 'onedrive', 'sharepoint',
+  'google', 'gmail', 'google drive', 'apple', 'icloud', 'amazon', 'aws',
+  'paypal', 'linkedin', 'dropbox', 'docusign', 'fedex', 'ups', 'usps',
+  'irs', 'social security', 'bank of america', 'chase', 'wells fargo'
 ];
 
 const SENDER_DOMAIN = '';
@@ -519,9 +543,45 @@ async function startScan() {
     setProgress(60);
     const findings = [];
 
-    // External sender check disabled — domain not configured
-    const isExternal = false;
+    // ── Sender analysis ──
     showSender(sender, false);
+    const isExternal = false;
+    const senderDomain = sender.split('@')[1] || '';
+    const lowerSenderDomain = senderDomain.toLowerCase();
+    const lowerSenderName = senderName.toLowerCase();
+    const lowerSubjectEarly = (item.subject || '').toLowerCase();
+
+    // Check for "via" third-party sender (e.g. "IT@company.com via ispservices.org")
+    const displayFrom = item.from ? item.from.displayName : '';
+    const viaMatch = displayFrom.match(/via\s+([^\s>]+)/i) || 
+                     headers.match(/X-Sender-Via:\s*([^\r\n]+)/i);
+    if (viaMatch) {
+      findings.push({
+        type: 'via-sender',
+        severity: 'warning',
+        icon: '📨',
+        title: 'Email Sent Via Third-Party',
+        badge: 'WARN',
+        detail: `This email was relayed through a third-party service: <code>${viaMatch[1]}</code>. Verify the sender is legitimate before responding.`
+      });
+    }
+
+    // Brand impersonation check — body/subject mentions trusted brand but sender domain doesn't match
+    const bodyForBrand = (body + ' ' + (item.subject || '')).toLowerCase();
+    const brandHits = IMPERSONATION_BRANDS.filter(brand => bodyForBrand.includes(brand));
+    if (brandHits.length > 0) {
+      const trustedMatch = TRUSTED_DOMAINS.some(domain => lowerSenderDomain.endsWith(domain));
+      if (!trustedMatch) {
+        findings.push({
+          type: 'brand-impersonation',
+          severity: 'critical',
+          icon: '🎭',
+          title: 'Possible Brand Impersonation',
+          badge: 'CRITICAL',
+          detail: `Email references <code>${brandHits.slice(0,2).join(', ')}</code> but was not sent from an official domain. Sender: <code>${senderDomain}</code>.`
+        });
+      }
+    }
 
     // ── Non-US origin check via IP geolocation ──
     setProgress(65);
@@ -578,10 +638,21 @@ async function startScan() {
       });
     }
 
-    // Suspicious link scan
+    // Suspicious link scan — scan both plain text URLs and hidden href URLs
     setProgress(80);
     const urlRegex = /https?:\/\/[^\s"'<>]+/gi;
-    const links = body.match(urlRegex) || [];
+    const hrefRegex = /href=["']([^"']+)["']/gi;
+    const plainLinks = body.match(urlRegex) || [];
+
+    // Also get body as HTML to extract hidden hrefs
+    const htmlBody = await getHtmlBody(item);
+    const hrefLinks = [];
+    let hrefMatch;
+    const hrefRe = /href=["']([^"']+)["']/gi;
+    while ((hrefMatch = hrefRe.exec(htmlBody)) !== null) {
+      if (hrefMatch[1].startsWith('http')) hrefLinks.push(hrefMatch[1]);
+    }
+    const links = [...new Set([...plainLinks, ...hrefLinks])];
     const suspLinks = [];
     links.forEach(link => {
       SUSPICIOUS_LINK_PATTERNS.forEach(pattern => {
@@ -694,6 +765,25 @@ function getBody(item) {
   });
 }
 
+// ── Get email HTML body (for href scanning) ──
+function getHtmlBody(item) {
+  return new Promise((resolve) => {
+    try {
+      item.body.getAsync(Office.CoercionType.Html, function(result) {
+        if (result && result.status === Office.AsyncResultStatus.Succeeded) {
+          resolve(result.value || '');
+        } else {
+          resolve('');
+        }
+      });
+    } catch(e) {
+      resolve('');
+    }
+  });
+}
+
+// ── Get email body 
+
 // ── Get email headers ──
 function getHeaders(item) {
   return new Promise((resolve) => {
@@ -768,15 +858,17 @@ function calculateRiskScore(findings) {
 
   // Weighted scores per finding type
   const weights = {
-    'malicious-attachment':  45,
-    'sender-spoofing':       40,
-    'suspicious-links':      35,
-    'phishing-keywords':     null, // scaled by hit count below
-    'non-us-origin':         20,
-    'external-sender':        5,  // reduced — most legit email is external
-    'social-engineering':    null, // scaled by hit count below
-    'http-links':             5,
-    'attachments-present':    3,
+    'malicious-attachment':   45,
+    'sender-spoofing':        40,
+    'brand-impersonation':    40,
+    'suspicious-links':       35,
+    'phishing-keywords':      null, // scaled by hit count below
+    'non-us-origin':          20,
+    'via-sender':             15,
+    'external-sender':         5,
+    'social-engineering':     null, // scaled by hit count below
+    'http-links':              5,
+    'attachments-present':     3,
   };
 
   // Combination multiplier — if 3+ categories fire, score gets a 1.2x boost
@@ -820,6 +912,8 @@ function renderScore(score) {
   let color, text, subtext;
   if (score === 0) {
     color = 'var(--green)'; text = 'CLEAN'; subtext = 'No threats detected';
+    // Still animate ring to show scan completed
+    ring.style.strokeDashoffset = circumference - (0.01 * circumference);
   } else if (score <= 25) {
     color = 'var(--green)'; text = 'LOW RISK'; subtext = 'Minor indicators found';
   } else if (score <= 55) {
